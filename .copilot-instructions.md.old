@@ -1,0 +1,265 @@
+# Instructions Copilot - Forestar Facturation
+
+## Vue d'ensemble
+
+**Forestar Facturation** est une application web de gestion complète des réconciliations bancaires développée pour l'écosystème Forestar. L'application a été transformée d'un système de réconciliation ponctuelle vers un système de gestion avec historique, persistance en base de données, et interface d'édition interactive.
+
+## Architecture générale
+
+### Frontend (Next.js + React)
+
+- **Framework** : Next.js 15 avec React 19 et TypeScript
+- **Styling** : Tailwind CSS 4
+- **Authentification** : Système d'auth custom avec tokens JWT
+- **État** : API centralisée avec client TypeScript robuste
+- **Navigation** : Multi-pages avec routing App Router Next.js
+
+### Backend (intégré au serveur Forestar)
+
+- **Serveur** : Express.js avec TypeScript (dans forestar-server)
+- **Worker** : Worker threads pour le traitement intensif (en cours de refactoring)
+- **Base de données** : Prisma ORM avec PostgreSQL
+- **Traitement CSV** : PapaParse pour l'analyse des fichiers
+- **API** : Routes RESTful centralisées avec authentification
+
+## Fonctionnalités principales
+
+### 1. Gestion des réconciliations
+
+- **Création** : Upload de fichiers CSV (factures et transactions)
+- **Historique** : Liste complète des réconciliations avec filtres
+- **Détails** : Interface détaillée pour chaque réconciliation
+- **Suppression** : Gestion des réconciliations terminées
+
+### 2. Interface de navigation
+
+- **Page d'accueil** : Redirection automatique vers la liste des réconciliations
+- **Liste des réconciliations** (`/reconciliations`) : Vue d'ensemble avec pagination et filtres
+- **Nouvelle réconciliation** (`/reconciliations/new`) : Interface de création
+- **Détail réconciliation** (`/reconciliations/[id]`) : Vue détaillée avec onglets
+
+### 3. Système de files d'attente
+
+- **Queue management** : Une seule réconciliation active à la fois
+- **Statuts** : QUEUED, PROCESSING, COMPLETED, FAILED, CANCELLED
+- **Monitoring** : Suivi en temps réel avec polling automatique
+- **Contrôles** : Possibilité d'annuler les réconciliations en cours
+
+### 4. Édition interactive des appariements
+
+- **Gestion des correspondances** : Interface pour valider/rejeter/modifier les matches
+- **Recherche d'alternatives** : Propositions de transactions alternatives
+- **Édition manuelle** : Création d'appariements manuels
+- **Audit trail** : Traçabilité des modifications
+
+### 5. Visualisation des données
+
+- **Tableaux interactifs** : Factures, transactions, correspondances
+- **Pagination** : Gestion des gros volumes de données
+- **Filtres** : Recherche et tri par différents critères
+- **Statistiques** : Taux de réconciliation, montants appariés
+
+## Structure des fichiers
+
+### Frontend (`forestar-facturation`)
+
+```
+src/
+├── app/                           # Pages Next.js (App Router)
+│   ├── page.tsx                   # Redirection vers /reconciliations
+│   ├── layout.tsx                 # Layout principal avec AuthProvider
+│   ├── connexion/page.tsx         # Page de connexion
+│   └── reconciliations/
+│       ├── page.tsx               # Liste des réconciliations
+│       ├── new/page.tsx           # Création nouvelle réconciliation
+│       └── [id]/page.tsx          # Détail d'une réconciliation
+├── components/                    # Composants React
+│   ├── Header.tsx                 # Navigation principale
+│   ├── ReconciliationsList.tsx    # Liste avec filtres et actions
+│   ├── CreateReconciliationForm.tsx # Formulaire de création
+│   ├── ReconciliationDetail.tsx   # Interface détaillée avec onglets
+│   ├── ProcessingStatus.tsx       # Monitoring des réconciliations actives
+│   ├── MatchManager.tsx           # Gestion des correspondances
+│   ├── MatchEditor.tsx            # Édition d'une correspondance
+│   ├── AlternativeMatchesList.tsx # Propositions alternatives
+│   ├── InvoicesTable.tsx          # Tableau des factures
+│   ├── TransactionsTable.tsx      # Tableau des transactions
+│   ├── ReconciliationResults.tsx  # Affichage des résultats
+│   └── ui/                        # Composants UI réutilisables
+│       ├── DataTable.tsx          # Tableau générique
+│       └── FileUpload.tsx         # Upload de fichiers
+├── lib/                           # Services et utilitaires
+│   ├── apiClient.ts               # Client API centralisé avec gestion token
+│   ├── reconciliationAPI.ts       # API spécialisée réconciliations
+│   ├── auth.tsx                   # Gestion authentification
+│   └── csvUtils.ts                # Validation fichiers CSV
+└── types/
+    └── index.ts                   # Types TypeScript complets
+```
+
+### Backend (dans `forestar-server`)
+
+```
+src/
+├── routes/
+│   └── facturation.routes.ts      # Routes API (/facturation/*)
+├── services/
+│   └── facturation.service.ts     # Logique métier avec persistance BDD
+└── workers/
+    └── reconciliation.worker.js   # Traitement asynchrone (en refactoring)
+
+prisma/
+└── schema.prisma                  # Modèles BDD (Reconciliation, InvoiceData, etc.)
+```
+
+## Modèles de données (Prisma)
+
+### Tables principales
+
+- **Reconciliation** : État et métadonnées des réconciliations
+- **InvoiceData** : Données des factures CSV
+- **BankTransactionData** : Données des transactions bancaires CSV
+- **ReconciliationMatch** : Résultats des appariements avec audit trail
+
+### Statuts et types
+
+- **ReconciliationStatus** : QUEUED | PROCESSING | COMPLETED | FAILED | CANCELLED
+- **MatchType** : EXACT_REF | EXACT_AMOUNT | FUZZY_NAME | COMBINED | MANUAL | NONE
+
+## API Architecture
+
+### Client centralisé (`apiClient.ts`)
+
+- **Authentification** : Gestion automatique du token JWT
+- **Gestion d'erreurs** : Centralisation des erreurs avec types
+- **Configuration** : Headers et base URL automatiques
+- **Type safety** : Interface TypeScript complète
+
+### Routes principales (`/facturation/*`)
+
+- `POST /reconciliation` - Créer une réconciliation
+- `GET /reconciliations` - Liste des réconciliations
+- `GET /reconciliation/:id` - Détails d'une réconciliation
+- `GET /reconciliation/:id/status` - Statut d'une réconciliation
+- `GET /reconciliation/:id/matches` - Correspondances
+- `GET /reconciliation/:id/invoices` - Factures de la réconciliation
+- `GET /reconciliation/:id/transactions` - Transactions de la réconciliation
+- `PUT /reconciliation/:id/match/:matchId` - Modifier une correspondance
+- `POST /reconciliation/:id/cancel` - Annuler une réconciliation
+- `DELETE /reconciliation/:id` - Supprimer une réconciliation
+- `GET /reconciliations/status` - Statut global des réconciliations
+
+## Flux de données et états
+
+### 1. Création d'une réconciliation
+
+```
+Upload CSV → Validation → Sauvegarde BDD → Queue → Worker → Traitement → Résultats BDD
+```
+
+### 2. Suivi en temps réel
+
+```
+Client → Polling API statut → Mise à jour interface → Notification completion
+```
+
+### 3. Édition interactive
+
+```
+Interface édition → Validation → API update → BDD → Recalcul statistiques → Interface
+```
+
+## Types de correspondances
+
+1. **EXACT_REF** : Correspondance parfaite par numéro de référence
+2. **EXACT_AMOUNT** : Correspondance par montant exact (avec tolérance)
+3. **FUZZY_NAME** : Correspondance approximative par nom client (Fuse.js)
+4. **COMBINED** : Combinaison nom + montant
+5. **MANUAL** : Appariement créé manuellement par l'utilisateur
+6. **NONE** : Aucune correspondance trouvée
+
+## Configuration et environnement
+
+### Variables d'environnement
+
+- `NEXT_PUBLIC_API_URL` : URL du serveur backend
+- `FACTURATION_SECRET_KEY` : Clé secrète pour l'authentification
+
+### Dépendances clés
+
+- **Frontend** : Next.js 15, React 19, Tailwind CSS 4, TypeScript
+- **Backend** : Express, Multer, PapaParse, Fuse.js, Prisma
+- **Base de données** : PostgreSQL avec Prisma ORM
+
+## Points d'attention pour le développement
+
+### Architecture
+
+- **Stateful** : Persistance complète en base de données
+- **Queue system** : Gestion d'une réconciliation active à la fois
+- **API centralisée** : Tous les appels passent par `apiClient.ts`
+- **Type safety** : Types TypeScript complets et cohérents
+
+### Performance
+
+- **Worker threads** : Traitement asynchrone pour éviter le blocage
+- **Pagination** : Gestion des gros volumes de données
+- **Indexation BDD** : Optimisation des requêtes fréquentes
+- **Polling optimisé** : Mise à jour temps réel sans surcharge
+
+### Sécurité
+
+- **Authentification JWT** : Token obligatoire pour toutes les routes
+- **Validation** : Validation stricte des fichiers CSV et données
+- **Audit trail** : Traçabilité des modifications avec utilisateur
+
+### Expérience utilisateur
+
+- **Navigation intuitive** : Structure multi-pages claire
+- **Feedback temps réel** : Indicateurs de progression
+- **Gestion d'erreurs** : Messages d'erreur contextuels
+- **Interface responsive** : Adaptation mobile et desktop
+
+### Maintenabilité
+
+- **Séparation des responsabilités** : Frontend/Backend/BDD bien distincts
+- **Types TypeScript** : Cohérence des interfaces
+- **Components modulaires** : Réutilisabilité des composants React
+- **API versioning** : Structure extensible
+
+## Cas d'usage typique
+
+1. L'utilisateur se connecte avec ses identifiants
+2. Accès à la liste des réconciliations avec historique
+3. Création d'une nouvelle réconciliation avec upload CSV
+4. Mise en queue et traitement automatique en arrière-plan
+5. Suivi du progrès en temps réel avec polling
+6. Consultation des résultats dans l'interface détaillée
+7. Édition interactive des correspondances si nécessaire
+8. Validation finale et archivage de la réconciliation
+
+## État actuel vs. Legacy
+
+### ✅ Nouveautés implémentées
+
+- **Persistance BDD** : Remplacement complet du localStorage
+- **Architecture multi-pages** : Navigation structurée
+- **API centralisée** : Client robuste avec gestion du token
+- **Interface d'édition** : Modification interactive des appariements
+- **Queue management** : Gestion des réconciliations actives
+- **Audit trail** : Traçabilité des modifications
+
+### ❌ Supprimé (Legacy)
+
+- **localStorage** : Plus de stockage local
+- **Génération Excel** : Plus de fichiers Excel générés
+- **Session unique** : Plus de gestion mono-session
+- **API dispersée** : Plus d'appels API non centralisés
+
+### 🔄 En cours de refactoring
+
+- **Worker de réconciliation** : Adaptation pour écriture BDD
+- **Composants legacy** : Migration vers nouvelles interfaces
+- **Tests** : Adaptation aux nouvelles fonctionnalités
+
+L'application constitue désormais un système complet de gestion des réconciliations bancaires avec toutes les fonctionnalités d'un logiciel professionnel : historique, édition, traçabilité, et interface utilisateur moderne.

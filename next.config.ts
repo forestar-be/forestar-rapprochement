@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "export",
+  // Commenté l'export statique car nous avons des pages dynamiques avec données en base
+  // output: "export",
   trailingSlash: true,
   images: {
     unoptimized: true,
