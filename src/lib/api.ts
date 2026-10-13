@@ -12,6 +12,7 @@ import {
   InvoiceFamilySummary,
   DolibarrReadStatus,
   PaymentReminders,
+  PaymentReminderSent,
 } from "@/types";
 
 import { API_URL, getSessionClient, SSO_ENABLED } from "./session";
@@ -655,20 +656,13 @@ export const saveReminderEmail = (
     { email }
   );
 
-// PDF d'une facture, à joindre au rappel.
-export const downloadInvoicePdf = (ref: string): Promise<Blob> =>
-  apiRequest(
-    `/facturation/reminders/invoices/${encodeURIComponent(ref)}/pdf`,
-    "GET"
-  );
-
 // Envoie le rappel d'un client par le serveur, avec ou sans factures jointes.
 export const sendPaymentReminder = (
   reconciliationId: string,
   thirdpartyId: number,
   email: string,
   attachInvoices: boolean
-): Promise<{ status: "sent"; sentAt: string; invoices: string[] }> =>
+): Promise<PaymentReminderSent> =>
   apiRequest(
     `/facturation/reconciliations/${reconciliationId}/reminders/send`,
     "POST",

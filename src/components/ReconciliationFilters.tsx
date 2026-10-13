@@ -1,5 +1,5 @@
 import React from "react";
-import { Search, Plus, Download } from "lucide-react";
+import { Search, Plus, Download, Mail } from "lucide-react";
 import {
   Button,
   Input,
@@ -21,8 +21,13 @@ interface ReconciliationFiltersProps {
   onSortChange: (config: SortConfig) => void;
   onCreateMatch: () => void;
   onExportExcel: () => void;
-  /** Actions propres à la page, placées avant l'export. */
-  extraActions?: React.ReactNode;
+  /** Ne garder que les factures à rappeler. */
+  remindOnly: boolean;
+  /** Factures à rappeler, `undefined` tant que Dolibarr n'a pas répondu. */
+  remindCount?: number;
+  /** Raison pour laquelle le filtre n'est pas disponible (rappels illisibles). */
+  remindUnavailableReason?: string;
+  onRemindOnlyChange: (remindOnly: boolean) => void;
 }
 
 // Fonction pour obtenir le label d'un type de filtre
@@ -63,7 +68,10 @@ export default function ReconciliationFilters({
   onSortChange,
   onCreateMatch,
   onExportExcel,
-  extraActions,
+  remindOnly,
+  remindCount,
+  remindUnavailableReason,
+  onRemindOnlyChange,
 }: ReconciliationFiltersProps) {
   const filterOptions: ComboboxOption[] = availableFilterTypes.map((type) => ({
     value: type,
@@ -75,7 +83,6 @@ export default function ReconciliationFilters({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-lg font-medium">Filtres des correspondances</h3>
         <div className="flex flex-wrap gap-2">
-          {extraActions}
           <Button variant="outline" onClick={onExportExcel}>
             <Download />
             Export Excel
@@ -116,6 +123,24 @@ export default function ReconciliationFilters({
           aria-label="Filtrer par type de correspondance"
           className="lg:w-80"
         />
+
+        <Button
+          variant={remindOnly ? "default" : "outline"}
+          aria-pressed={remindOnly}
+          disabled={remindCount === undefined && !remindOnly}
+          title={
+            remindUnavailableReason ??
+            (remindCount === undefined
+              ? "Lecture des factures impayées dans Dolibarr…"
+              : "Ne montrer que les factures à rappeler")
+          }
+          onClick={() => onRemindOnlyChange(!remindOnly)}
+        >
+          <Mail />
+          {remindCount === undefined
+            ? "À rappeler"
+            : `À rappeler (${remindCount})`}
+        </Button>
       </div>
     </div>
   );

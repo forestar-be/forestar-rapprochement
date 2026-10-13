@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ConfirmDialog,
@@ -22,10 +22,12 @@ import MatchesTable from "@/components/MatchesTable";
 import FileInfo from "@/components/FileInfo";
 import ExportWarningModal from "@/components/ExportWarningModal";
 import ExportLoadingModal from "@/components/ExportLoadingModal";
-import PaymentRemindersDialog from "@/components/PaymentRemindersDialog";
+import ReminderDialog from "@/components/ReminderDialog";
 import { useReconciliationDetail } from "@/hooks/useReconciliationDetail";
 import { useReconciliationFilters } from "@/hooks/useReconciliationFilters";
-import { DetailedReconciliationMatch } from "@/types";
+import type { ReminderTarget } from "@/hooks/usePaymentReminders";
+import { countInvoicePaymentStates } from "@/lib/reconciliationUtils";
+import { DetailedReconciliationMatch, ReminderGroup } from "@/types";
 
 const ITEMS_PER_PAGE_OPTIONS = [5, 10, 25, 50, 100];
 
@@ -37,6 +39,11 @@ export default function ReconciliationDetailPage() {
   // Rejet en attente de confirmation
   const [matchToReject, setMatchToReject] =
     useState<DetailedReconciliationMatch | null>(null);
+
+  // Client dont la fenêtre de rappel est ouverte (copie prise à l'ouverture)
+  const [reminderGroup, setReminderGroup] = useState<ReminderGroup | null>(
+    null
+  );
 
   // Utiliser le hook personnalisé pour la logique principale
   const {
@@ -56,6 +63,8 @@ export default function ReconciliationDetailPage() {
     setSearchTerm,
     selectedFilters,
     setSelectedFilters,
+    remindOnly,
+    setRemindOnly,
     sortConfig,
     currentPage,
     setCurrentPage,
@@ -64,6 +73,8 @@ export default function ReconciliationDetailPage() {
     invoicesWithMultipleMatches,
     unmatchedTransactions,
     unmatchedInvoices,
+    reminders,
+    reloadReminders,
     getInvoiceFromMatch,
     getTransactionFromMatch,
     handleEditMatch,
@@ -93,6 +104,7 @@ export default function ReconciliationDetailPage() {
     availableFilterTypes,
     totalItemsCount,
     filterTypeCounts,
+    remindCount,
     paginationData,
   } = useReconciliationFilters(
     reconciliation?.matches || [],
@@ -102,8 +114,23 @@ export default function ReconciliationDetailPage() {
     currentPage,
     itemsPerPage,
     getInvoiceFromMatch,
-    getTransactionFromMatch
+    getTransactionFromMatch,
+    remindOnly,
+    reminders.toRemind
   );
+
+  // Factures dont le paiement proposé reste à trancher (hors multiples, qui ont
+  // leur propre bandeau)
+  const toVerifyCount = useMemo(() => {
+    const multipleIds = new Set(
+      invoicesWithMultipleMatches.map((item) => item.invoiceId)
+    );
+    return countInvoicePaymentStates(
+      (reconciliation?.matches ?? []).filter(
+        (match) => !multipleIds.has(match.invoiceId)
+      )
+    )["to-verify"];
+  }, [reconciliation?.matches, invoicesWithMultipleMatches]);
 
   const { totalItems, totalPages, startIndex, endIndex, paginatedItems } =
     paginationData;
@@ -170,15 +197,19 @@ export default function ReconciliationDetailPage() {
           onSortChange={handleSortChange}
           onCreateMatch={() => setShowCreateMatchModal(true)}
           onExportExcel={handleExportExcel}
-          extraActions={
-            <PaymentRemindersDialog reconciliationId={reconciliationId} />
+          remindOnly={remindOnly}
+          remindCount={reminders.status === "ready" ? remindCount : undefined}
+          remindUnavailableReason={
+            reminders.status === "error"
+              ? `Rappels indisponibles : ${reminders.error}`
+              : undefined
           }
+          onRemindOnlyChange={setRemindOnly}
         />
 
-        {/* Statistiques rapides */}
+        {/* Ce qu'il reste à traiter */}
         <ReconciliationAlerts
-          unmatchedInvoicesCount={unmatchedInvoices.length}
-          unmatchedTransactionsCount={unmatchedTransactions.length}
+          toVerifyCount={toVerifyCount}
           invoicesWithMultipleMatches={invoicesWithMultipleMatches}
         />
 
@@ -223,6 +254,8 @@ export default function ReconciliationDetailPage() {
           onValidateMatch={handleValidateMatch}
           onRejectMatch={setMatchToReject}
           onResolveMultiple={handleOpenMultipleMatchResolver}
+          reminders={reminders}
+          onRemind={(target: ReminderTarget) => setReminderGroup(target.group)}
         />
 
         {/* Pagination en bas */}
@@ -291,6 +324,17 @@ export default function ReconciliationDetailPage() {
         />
       )}
 
+      {/* Rappel de paiement d'un client, depuis la ligne d'une facture */}
+      {reminderGroup && (
+        <ReminderDialog
+          reconciliationId={reconciliationId}
+          group={reminderGroup}
+          resendAfterDays={reminders.resendAfterDays}
+          onClose={() => setReminderGroup(null)}
+          onSent={reloadReminders}
+        />
+      )}
+
       {/* Confirmation du rejet depuis le tableau */}
       <ConfirmDialog
         open={matchToReject !== null}
@@ -312,6 +356,7 @@ export default function ReconciliationDetailPage() {
         onConfirm={performExport}
         searchTerm={searchTerm}
         selectedFilters={selectedFilters}
+        remindOnly={remindOnly}
       />
 
       <ExportLoadingModal

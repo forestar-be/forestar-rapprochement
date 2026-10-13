@@ -310,8 +310,8 @@ export interface ReminderInvoice {
   paid: number;
   due: number;
   communication: string;
-  /** Dernier rappel envoyé par le serveur pour cette facture (ISO). */
-  lastReminderAt?: string | null;
+  /** Dernier rappel envoyé par le serveur pour cette facture, null si aucun. */
+  lastReminder: { sentAt: string; email: string } | null;
 }
 
 /** Un rappel par client : ses factures impayées et le courriel prêt à relire. */
@@ -333,9 +333,19 @@ export interface ReminderGroup {
 export interface PaymentReminders {
   groups: ReminderGroup[];
   account: { iban: string; bic: string } | null;
+  /** Délai minimal, en jours, avant un nouveau rappel pour une même facture. */
+  resendAfterDays: number;
   /** Factures dont l'association reste à trancher : hors rappel. */
   toVerify: number;
   /** Sans virement au relevé, mais soldées dans Dolibarr : hors rappel. */
   settledInDolibarr: string[];
   unknownInDolibarr: string[];
+}
+
+/** Réponse de POST /facturation/reconciliations/:id/reminders/send. */
+export interface PaymentReminderSent {
+  status: "sent";
+  sentAt: string;
+  email: string;
+  invoices: string[];
 }

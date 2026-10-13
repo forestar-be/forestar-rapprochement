@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { ArrowLeft, FileText, CreditCard, CheckCircle } from "lucide-react";
 import { Button, Card } from "@forestar-be/ui";
 import { ReconciliationDetails } from "@/types";
@@ -10,6 +10,7 @@ import {
   getStatusLabel,
   formatDuration,
   getReconciliationDisplayTitle,
+  countInvoicePaymentStates,
 } from "@/lib/reconciliationUtils";
 
 interface ReconciliationHeaderProps {
@@ -65,6 +66,13 @@ export default function ReconciliationHeader({
       return false;
     }
   };
+
+  // Comptes recalculés depuis les associations chargées : ils suivent chaque
+  // validation, rejet ou association à la main sans recharger le rapprochement.
+  const paymentCounts = useMemo(
+    () => countInvoicePaymentStates(reconciliation.matches),
+    [reconciliation.matches]
+  );
 
   const displayTitle = getReconciliationDisplayTitle(
     reconciliation.title,
@@ -152,11 +160,11 @@ export default function ReconciliationHeader({
           icon={<CheckCircle className="size-5 text-success" />}
           label="Payées (sûr)"
         >
-          {reconciliation.exactMatches}
+          {paymentCounts.sure}
           <span className="ml-1 text-sm font-normal text-muted-foreground">
             / {reconciliation.totalInvoices}
-            {reconciliation.fuzzyMatches > 0 &&
-              ` · ${reconciliation.fuzzyMatches} à vérifier`}
+            {paymentCounts["to-verify"] > 0 &&
+              ` · ${paymentCounts["to-verify"]} à vérifier`}
           </span>
         </StatCard>
       </div>

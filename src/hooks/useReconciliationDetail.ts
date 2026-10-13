@@ -12,6 +12,7 @@ import { ReconciliationDetails, DetailedReconciliationMatch } from "@/types";
 import { exportToExcel } from "@/lib/excelExport";
 import { SortConfig } from "@/components/SortSelector";
 import { isExportWarningDismissed } from "@/components/ExportWarningModal";
+import { usePaymentReminders } from "@/hooks/usePaymentReminders";
 
 // Fonction utilitaire pour appliquer le tri
 function applySorting(
@@ -174,6 +175,8 @@ export function useReconciliationDetail(reconciliationId: string) {
   // États pour la recherche, filtres et tri
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
+  // Ne garder que les factures à rappeler
+  const [remindOnly, setRemindOnly] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     field: null,
     direction: "desc",
@@ -214,6 +217,12 @@ export function useReconciliationDetail(reconciliationId: string) {
       fetchReconciliation();
     }
   }, [isAuthenticated, reconciliationId]);
+
+  // Rappels de paiement, lus en tâche de fond après le chargement
+  const { reminders, reloadReminders } = usePaymentReminders(
+    reconciliationId,
+    reconciliation?.matches
+  );
 
   // Fonction pour recharger les données
   const reloadReconciliation = useCallback(async () => {
@@ -488,10 +497,12 @@ export function useReconciliationDetail(reconciliationId: string) {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- retour à la page 1 à chaque changement de recherche, de filtre ou de tri
     setCurrentPage(1);
-  }, [searchTerm, selectedFilters, sortConfig]);
+  }, [searchTerm, selectedFilters, sortConfig, remindOnly]);
 
   // Logique d'export Excel
-  const hasActiveFilters = Boolean(searchTerm || selectedFilters.length > 0);
+  const hasActiveFilters = Boolean(
+    searchTerm || selectedFilters.length > 0 || remindOnly
+  );
   const hasActiveSort = Boolean(sortConfig.field);
 
   const performExport = useCallback(async () => {
@@ -580,8 +591,9 @@ export function useReconciliationDetail(reconciliationId: string) {
       Object.entries(filteredGroups).forEach(([invoiceId, group]) => {
         if (group.isOriginallyMultiple) {
           const shouldIncludeByFilter =
-            selectedFilters.length === 0 ||
-            selectedFilters.includes("MULTIPLE");
+            !remindOnly &&
+            (selectedFilters.length === 0 ||
+              selectedFilters.includes("MULTIPLE"));
 
           if (shouldIncludeByFilter) {
             allDisplayItems.push({
@@ -596,7 +608,9 @@ export function useReconciliationDetail(reconciliationId: string) {
           const match = group.allMatches[0];
           let shouldIncludeByFilter = false;
 
-          if (selectedFilters.length === 0) {
+          if (remindOnly && !reminders.toRemind.has(group.invoice?.ref ?? "")) {
+            // hors du filtre « À rappeler »
+          } else if (selectedFilters.length === 0) {
             shouldIncludeByFilter = true;
           } else {
             if (match.isManualMatch && selectedFilters.includes("MANUAL")) {
@@ -660,6 +674,8 @@ export function useReconciliationDetail(reconciliationId: string) {
     searchTerm,
     selectedFilters,
     sortConfig,
+    remindOnly,
+    reminders.toRemind,
     getInvoiceFromMatch,
     getTransactionFromMatch,
   ]);
@@ -694,6 +710,8 @@ export function useReconciliationDetail(reconciliationId: string) {
     setSearchTerm,
     selectedFilters,
     setSelectedFilters,
+    remindOnly,
+    setRemindOnly,
     sortConfig,
     currentPage,
     setCurrentPage,
@@ -705,6 +723,10 @@ export function useReconciliationDetail(reconciliationId: string) {
     invoicesWithMultipleMatches,
     unmatchedTransactions,
     unmatchedInvoices,
+
+    // Rappels de paiement
+    reminders,
+    reloadReminders,
 
     // Fonctions utilitaires
     getInvoiceFromMatch,

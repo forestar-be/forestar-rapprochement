@@ -28,10 +28,10 @@ export const getMatchTypeLabel = (
 
   // Si c'est validé ou rejeté, afficher le statut de validation
   if (validationStatus === "VALIDATED") {
-    return "Validé";
+    return "Validée";
   }
   if (validationStatus === "REJECTED") {
-    return "Rejeté";
+    return "Rejetée";
   }
 
   // Sinon, afficher le type de correspondance normal
@@ -88,9 +88,9 @@ export const getMatchTypeOnly = (
 export const getValidationStatusLabel = (validationStatus?: string) => {
   switch (validationStatus) {
     case "VALIDATED":
-      return "Validé";
+      return "Validée";
     case "REJECTED":
-      return "Rejeté";
+      return "Rejetée";
     case "PENDING":
       return "En attente";
     default:
@@ -204,6 +204,9 @@ export const getReconciliationDisplayTitle = (
   return "Rapprochement";
 };
 
+/** Confiance à partir de laquelle une association est sûre (comme le serveur). */
+export const SURE_CONFIDENCE = 80;
+
 export interface ConfidenceDisplay {
   percent: number;
   tone: "primary" | "success" | "warning" | "danger";
@@ -238,7 +241,7 @@ export const getConfidenceDisplay = (
   return {
     percent: match.confidence,
     tone:
-      match.confidence >= 80
+      match.confidence >= SURE_CONFIDENCE
         ? "success"
         : match.confidence >= 50
           ? "warning"
@@ -269,3 +272,73 @@ export const summarizeSelectedFamilies = (
       }),
       { count: 0, excludedCash: 0, totalTTC: 0 }
     );
+
+export type InvoicePaymentState = "sure" | "to-verify" | "unpaid";
+
+/**
+ * Où en est le paiement d'une facture, d'après toutes ses lignes d'association
+ * (comme le serveur, qui enregistre les mêmes comptes) :
+ * - sûr : une ligne a une transaction ET (confiance sûre, validée ou manuelle) ;
+ * - à vérifier : une ligne a une transaction, sans que ce soit sûr ;
+ * - sans paiement : aucune ligne n'a de transaction.
+ */
+export const getInvoicePaymentState = (
+  matches: {
+    transactionId?: string | null;
+    confidence: number;
+    isManualMatch: boolean;
+    validationStatus?: string;
+  }[]
+): InvoicePaymentState => {
+  const linked = matches.filter((m) => m.transactionId);
+  if (linked.length === 0) return "unpaid";
+  return linked.some(
+    (m) =>
+      m.confidence >= SURE_CONFIDENCE ||
+      m.validationStatus === "VALIDATED" ||
+      m.isManualMatch
+  )
+    ? "sure"
+    : "to-verify";
+};
+
+/** Factures sûres, à vérifier et sans paiement, une fois par facture. */
+export const countInvoicePaymentStates = (
+  matches: (Parameters<typeof getInvoicePaymentState>[0][number] & {
+    invoiceId: string;
+  })[]
+): Record<InvoicePaymentState, number> => {
+  const byInvoice = new Map<string, typeof matches>();
+  for (const match of matches) {
+    const group = byInvoice.get(match.invoiceId);
+    if (group) group.push(match);
+    else byInvoice.set(match.invoiceId, [match]);
+  }
+  const counts = { sure: 0, "to-verify": 0, unpaid: 0 };
+  for (const group of byInvoice.values()) {
+    counts[getInvoicePaymentState(group)]++;
+  }
+  return counts;
+};
+
+/**
+ * Payeur et communication d'un libellé de virement Belfius :
+ * « Virement en euros (SEPA) De: NOM - BE00… Communication: TEXTE Info
+ * personnelle: … ». Une partie introuvable est omise ; sans rien d'extrait, le
+ * libellé reste à l'appelant.
+ */
+export const parseTransactionLabel = (
+  label?: string | null
+): { payer?: string; communication?: string } => {
+  if (!label) return {};
+  const payer = label.match(/\bDe:\s*(.+?)\s+-\s+[A-Z]{2}\d{2}/)?.[1]?.trim();
+  const communication = label
+    .match(
+      /\bCommunication:\s*([\s\S]*?)\s*(?:Info personnelle|Virement\b|$)/
+    )?.[1]
+    ?.trim();
+  return {
+    ...(payer ? { payer } : {}),
+    ...(communication ? { communication } : {}),
+  };
+};
