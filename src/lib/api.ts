@@ -13,6 +13,7 @@ import {
   DolibarrReadStatus,
   PaymentReminders,
   PaymentReminderSent,
+  ReminderInvoice,
 } from "@/types";
 
 import { API_URL, getSessionClient, SSO_ENABLED } from "./session";
@@ -661,11 +662,33 @@ export const sendPaymentReminder = (
   reconciliationId: string,
   thirdpartyId: number,
   email: string,
-  attachInvoices: boolean
+  attachInvoices: boolean,
+  // factures soldées dans Dolibarr à rappeler quand même
+  includeSettled: string[] = []
 ): Promise<PaymentReminderSent> =>
   apiRequest(
     `/facturation/reconciliations/${reconciliationId}/reminders/send`,
     "POST",
     undefined,
-    { thirdpartyId, email, attachInvoices }
+    { thirdpartyId, email, attachInvoices, includeSettled }
   );
+
+// Texte du rappel pour un choix de factures (quand une facture soldée dans
+// Dolibarr y est ajoutée).
+export const previewReminderMail = (
+  invoices: ReminderInvoice[],
+  account: PaymentReminders["account"]
+): Promise<{ subject: string; body: string }> =>
+  apiRequest("/facturation/reminders/preview", "POST", undefined, {
+    invoices: invoices.map(
+      ({ ref, date, totalTTC, paid, due, communication }) => ({
+        ref,
+        date,
+        totalTTC,
+        paid,
+        due,
+        communication,
+      })
+    ),
+    account,
+  });

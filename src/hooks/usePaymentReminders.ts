@@ -19,8 +19,13 @@ export interface PaymentReminderIndex {
   error: string;
   /** Factures à rappeler, par référence. */
   toRemind: Map<string, ReminderTarget>;
-  /** Factures sans virement au relevé, mais soldées dans Dolibarr. */
-  settled: Set<string>;
+  /**
+   * Factures sans virement au relevé, mais soldées dans Dolibarr : rappelées
+   * seulement sur demande. `null` quand Dolibarr n'en donne pas le détail.
+   */
+  settled: Map<string, ReminderTarget | null>;
+  /** Compte imprimé sur les rappels. */
+  account: PaymentReminders["account"];
   resendAfterDays: number;
 }
 
@@ -85,11 +90,20 @@ export function usePaymentReminders(
         toRemind.set(invoice.ref, { group, invoice });
       }
     }
+    const settled = new Map<string, ReminderTarget | null>(
+      (reminders?.settledInDolibarr ?? []).map((ref) => [ref, null])
+    );
+    for (const group of reminders?.groups ?? []) {
+      for (const invoice of group.settledInvoices ?? []) {
+        settled.set(invoice.ref, { group, invoice });
+      }
+    }
     return {
       status: error ? "error" : reminders ? "ready" : "loading",
       error,
       toRemind,
-      settled: new Set(reminders?.settledInDolibarr ?? []),
+      settled,
+      account: reminders?.account ?? null,
       resendAfterDays: reminders?.resendAfterDays ?? DEFAULT_RESEND_AFTER_DAYS,
     };
   }, [reminders, error]);

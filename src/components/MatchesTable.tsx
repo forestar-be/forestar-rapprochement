@@ -12,6 +12,7 @@ import {
   DetailedInvoice,
   DetailedReconciliationMatch,
 } from "@/types";
+import { settlementLabel, settlementLines } from "@/lib/settlement";
 import {
   getConfidenceDisplay,
   getMatchTypeOnly,
@@ -102,12 +103,6 @@ function getMatchingTransactionsInfo(
     hasFilter: true,
   };
 }
-
-const isSettledInDolibarr = (
-  item: DisplayItem,
-  reminders: PaymentReminderIndex
-): boolean =>
-  Boolean(item.invoice?.ref && reminders.settled.has(item.invoice.ref));
 
 function InvoiceCell({ invoice }: { invoice: any }) {
   const ref: string | undefined = invoice?.ref;
@@ -238,21 +233,14 @@ export default function MatchesTable({
               <PaymentCell transaction={transaction} invoice={item.invoice} />
             );
           }
-          // Payée autrement que par un virement du relevé (ou après sa
-          // période) : sans cette mention, l'absence de « Rappeler » ne
-          // s'explique pas.
-          if (isSettledInDolibarr(item, reminders)) {
-            return (
-              <div>
-                <div className="font-medium">Soldée dans Dolibarr</div>
-                <div className="text-xs text-muted-foreground">
-                  Aucun virement au relevé
-                </div>
-              </div>
-            );
-          }
-          const lastReminder = item.invoice?.ref
-            ? reminders.toRemind.get(item.invoice.ref)?.invoice.lastReminder
+          const ref: string | undefined = item.invoice?.ref;
+          const settled = ref !== undefined && reminders.settled.has(ref);
+          const settlement = ref
+            ? reminders.settled.get(ref)?.invoice.settlement
+            : undefined;
+          const lastReminder = ref
+            ? (reminders.toRemind.get(ref) ?? reminders.settled.get(ref))
+                ?.invoice.lastReminder
             : null;
           return (
             <div>
@@ -267,6 +255,20 @@ export default function MatchesTable({
                   ? "Association rejetée"
                   : "Aucun paiement trouvé"}
               </div>
+              {/* Payée autrement que par un virement du relevé, ou après sa
+                  période : ce que Dolibarr en sait */}
+              {settled && (
+                <div className="mt-0.5 text-xs">
+                  <div className="font-medium">
+                    {settlementLabel(settlement)}
+                  </div>
+                  {settlementLines(settlement).map((line) => (
+                    <div key={line} className="text-muted-foreground">
+                      {line}
+                    </div>
+                  ))}
+                </div>
+              )}
               {lastReminder && (
                 <div className="text-xs text-success">
                   Rappel envoyé le {formatShortDay(lastReminder.sentAt)}
@@ -297,14 +299,6 @@ export default function MatchesTable({
           }
 
           const match = item.match!;
-          if (
-            !getTransactionFromMatch(match) &&
-            isSettledInDolibarr(item, reminders)
-          ) {
-            return (
-              <StatusBadge tone="success">Soldée dans Dolibarr</StatusBadge>
-            );
-          }
           return (
             <div className="flex flex-col items-start gap-1">
               <StatusBadge
@@ -401,7 +395,14 @@ export default function MatchesTable({
           const canDecide =
             hasTransaction && match.validationStatus === "PENDING";
           const ref: string | undefined = item.invoice?.ref;
-          const target = ref ? reminders.toRemind.get(ref) : undefined;
+          // Une facture soldée dans Dolibarr garde son bouton : la fenêtre
+          // avertit et demande confirmation avant l'envoi.
+          const settledTarget =
+            ref && !hasTransaction ? reminders.settled.get(ref) : undefined;
+          const target =
+            (ref ? reminders.toRemind.get(ref) : undefined) ??
+            settledTarget ??
+            undefined;
           // Tant que Dolibarr n'a pas répondu (ou ne répond pas), le bouton
           // reste visible mais éteint sur les factures sans paiement.
           const remindUnavailable =
@@ -459,7 +460,11 @@ export default function MatchesTable({
                   variant="outline"
                   size="xs"
                   className="self-start"
-                  title="Préparer le rappel de paiement de ce client"
+                  title={
+                    target.invoice.settlement
+                      ? "Dolibarr indique cette facture comme soldée : le rappel demandera une confirmation"
+                      : "Préparer le rappel de paiement de ce client"
+                  }
                   onClick={() => onRemind(target)}
                 >
                   <Mail />

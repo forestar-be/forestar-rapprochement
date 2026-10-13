@@ -27,7 +27,7 @@ import { useReconciliationDetail } from "@/hooks/useReconciliationDetail";
 import { useReconciliationFilters } from "@/hooks/useReconciliationFilters";
 import type { ReminderTarget } from "@/hooks/usePaymentReminders";
 import { countInvoicePaymentStates } from "@/lib/reconciliationUtils";
-import { DetailedReconciliationMatch, ReminderGroup } from "@/types";
+import { DetailedReconciliationMatch } from "@/types";
 
 const ITEMS_PER_PAGE_OPTIONS = [5, 10, 25, 50, 100];
 
@@ -41,7 +41,7 @@ export default function ReconciliationDetailPage() {
     useState<DetailedReconciliationMatch | null>(null);
 
   // Client dont la fenêtre de rappel est ouverte (copie prise à l'ouverture)
-  const [reminderGroup, setReminderGroup] = useState<ReminderGroup | null>(
+  const [reminderTarget, setReminderTarget] = useState<ReminderTarget | null>(
     null
   );
 
@@ -255,7 +255,7 @@ export default function ReconciliationDetailPage() {
           onRejectMatch={setMatchToReject}
           onResolveMultiple={handleOpenMultipleMatchResolver}
           reminders={reminders}
-          onRemind={(target: ReminderTarget) => setReminderGroup(target.group)}
+          onRemind={setReminderTarget}
         />
 
         {/* Pagination en bas */}
@@ -325,12 +325,14 @@ export default function ReconciliationDetailPage() {
       )}
 
       {/* Rappel de paiement d'un client, depuis la ligne d'une facture */}
-      {reminderGroup && (
+      {reminderTarget && (
         <ReminderDialog
           reconciliationId={reconciliationId}
-          group={reminderGroup}
+          group={reminderTarget.group}
+          openedFrom={reminderTarget.invoice}
+          account={reminders.account}
           resendAfterDays={reminders.resendAfterDays}
-          onClose={() => setReminderGroup(null)}
+          onClose={() => setReminderTarget(null)}
           onSent={reloadReminders}
         />
       )}

@@ -303,6 +303,23 @@ export type DolibarrReadStatus =
 
 // === Rappels de paiement ===
 
+/** Ce que Dolibarr a pointé sur une facture qu'il tient pour soldée. */
+export interface ReminderSettlement {
+  status: "paid" | "abandoned" | "draft";
+  /** Paiements enregistrés dans Dolibarr ; null si leur lecture a échoué. */
+  payments:
+    | {
+        date: string;
+        amount: number;
+        mode: string;
+        ref: string;
+        num: string;
+      }[]
+    | null;
+  creditNotes: number;
+  deposits: number;
+}
+
 export interface ReminderInvoice {
   ref: string;
   date: string;
@@ -312,6 +329,8 @@ export interface ReminderInvoice {
   communication: string;
   /** Dernier rappel envoyé par le serveur pour cette facture, null si aucun. */
   lastReminder: { sentAt: string; email: string } | null;
+  /** Présent sur les factures soldées dans Dolibarr uniquement. */
+  settlement?: ReminderSettlement;
 }
 
 /** Un rappel par client : ses factures impayées et le courriel prêt à relire. */
@@ -324,6 +343,11 @@ export interface ReminderGroup {
   town: string;
   email: string;
   invoices: ReminderInvoice[];
+  /**
+   * Sans virement au relevé mais soldées dans Dolibarr : hors du rappel, sauf
+   * si le gérant les y ajoute. Leur « dû » est le montant TTC entier.
+   */
+  settledInvoices: ReminderInvoice[];
   totalDue: number;
   subject: string;
   body: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   Check,
@@ -23,19 +23,28 @@ import {
   Label,
   Spinner,
 } from "@forestar-be/ui";
-import { saveReminderEmail, sendPaymentReminder } from "@/lib/api";
+import {
+  previewReminderMail,
+  saveReminderEmail,
+  sendPaymentReminder,
+} from "@/lib/api";
 import { formatAmount, formatDay, formatShortDay } from "@/lib/format";
-import { ReminderGroup } from "@/types";
+import { settlementLabel, settlementLines } from "@/lib/settlement";
+import { PaymentReminders, ReminderGroup, ReminderInvoice } from "@/types";
 
 const EMAIL = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const gmailUrl = (to: string, group: ReminderGroup) =>
-  `https://mail.google.com/mail/?view=cm&fs=1&tf=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(group.subject)}&body=${encodeURIComponent(group.body)}`;
+const gmailUrl = (to: string, mail: { subject: string; body: string }) =>
+  `https://mail.google.com/mail/?view=cm&fs=1&tf=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(mail.subject)}&body=${encodeURIComponent(mail.body)}`;
 
 interface ReminderDialogProps {
   reconciliationId: string;
   group: ReminderGroup;
+  /** Facture de la ligne d'où la fenêtre est ouverte. */
+  openedFrom: ReminderInvoice;
+  /** Compte imprimé sur le rappel. */
+  account: PaymentReminders["account"];
   /** Délai minimal, en jours, avant un nouveau rappel (fixé par le serveur). */
   resendAfterDays: number;
   onClose: () => void;
@@ -48,10 +57,16 @@ interface ReminderDialogProps {
  * rappel reste par client, avec toutes ses factures impayées de ce
  * rapprochement. Le serveur l'envoie après confirmation (si un rappel est déjà
  * parti) ; il refuse de lui-même un second rappel trop proche du premier.
+ *
+ * Une facture que Dolibarr tient pour soldée n'entre dans le rappel que si le
+ * gérant la coche (elle l'est d'office quand la fenêtre s'ouvre depuis sa
+ * ligne), et l'envoi demande alors une confirmation.
  */
 export default function ReminderDialog({
   reconciliationId,
   group,
+  openedFrom,
+  account,
   resendAfterDays,
   onClose,
   onSent,
@@ -63,22 +78,64 @@ export default function ReminderDialog({
   const [attachInvoices, setAttachInvoices] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [confirmingResend, setConfirmingResend] = useState(false);
+  const [confirmingSettled, setConfirmingSettled] = useState(false);
+  // Factures soldées dans Dolibarr que le gérant rappelle quand même.
+  const [included, setIncluded] = useState<string[]>(() =>
+    openedFrom.settlement ? [openedFrom.ref] : []
+  );
+  const [preview, setPreview] = useState<{
+    key: string;
+    mail: { subject: string; body: string } | null;
+  } | null>(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [sent, setSent] = useState<{ sentAt: string; email: string } | null>(
     null
   );
 
+  const forced = useMemo(
+    () => group.settledInvoices.filter((i) => included.includes(i.ref)),
+    [group.settledInvoices, included]
+  );
+  const invoices = useMemo(
+    () => [...group.invoices, ...forced],
+    [group.invoices, forced]
+  );
+  const totalDue =
+    Math.round(invoices.reduce((sum, i) => sum + i.due, 0) * 100) / 100;
+
+  // Le texte préparé par le serveur ne couvre que les factures impayées : dès
+  // qu'une facture soldée s'y ajoute, il est redemandé.
+  const previewKey = forced.map((i) => i.ref).join(",");
+  useEffect(() => {
+    if (previewKey === "") return;
+    let cancelled = false;
+    previewReminderMail(invoices, account)
+      .then((mail) => !cancelled && setPreview({ key: previewKey, mail }))
+      .catch(() => !cancelled && setPreview({ key: previewKey, mail: null }));
+    return () => {
+      cancelled = true;
+    };
+    // `invoices` suit `previewKey`
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewKey, account]);
+  const mail =
+    previewKey === ""
+      ? { subject: group.subject, body: group.body }
+      : preview?.key === previewKey
+        ? preview.mail
+        : null;
+
   // Dernier rappel connu à l'ouverture (le journal du serveur, toutes factures
-  // du client confondues).
+  // du rappel confondues).
   const previous = useMemo(
     () =>
-      group.invoices
+      invoices
         .map((invoice) => invoice.lastReminder)
         .filter((last) => last !== null)
         .sort((a, b) => (a.sentAt < b.sentAt ? -1 : 1))
         .pop() ?? null,
-    [group.invoices]
+    [invoices]
   );
   const retryAt = previous
     ? new Date(new Date(previous.sentAt).getTime() + resendAfterDays * DAY_MS)
@@ -87,7 +144,8 @@ export default function ReminderDialog({
 
   const to = email.trim();
   const emailValid = EMAIL.test(to);
-  const plural = group.invoices.length > 1;
+  const plural = invoices.length > 1;
+  const forcedRefs = forced.map((i) => i.ref).join(", ");
 
   // L'adresse saisie est rangée sur la fiche du client dès qu'elle est valide.
   const saveEmail = async () => {
@@ -110,7 +168,8 @@ export default function ReminderDialog({
         reconciliationId,
         group.thirdpartyId,
         to,
-        attachInvoices
+        attachInvoices,
+        forced.map((i) => i.ref)
       );
       setSent({ sentAt: result.sentAt, email: result.email });
       onSent();
@@ -127,13 +186,15 @@ export default function ReminderDialog({
 
   const openInGmail = () => {
     void saveEmail();
-    window.open(gmailUrl(to, group), "_blank", "noopener");
+    if (mail) window.open(gmailUrl(to, mail), "_blank", "noopener");
   };
 
-  // Un second rappel passe d'abord par une confirmation.
+  // Une facture soldée dans Dolibarr, ou un second rappel, passe d'abord par
+  // une confirmation.
   const handleSendClick = () => {
     setSendError("");
-    if (previous) setConfirmingResend(true);
+    if (forced.length > 0) setConfirmingSettled(true);
+    else if (previous) setConfirmingResend(true);
     else void send();
   };
 
@@ -171,7 +232,12 @@ export default function ReminderDialog({
 
             <div className="space-y-2 rounded-lg border p-3">
               <ul className="space-y-1 text-sm">
-                {group.invoices.map((invoice) => (
+                {invoices.length === 0 && (
+                  <li className="text-muted-foreground">
+                    Aucune facture dans ce rappel.
+                  </li>
+                )}
+                {invoices.map((invoice) => (
                   <li
                     key={invoice.ref}
                     className="flex flex-wrap justify-between gap-x-4"
@@ -197,9 +263,59 @@ export default function ReminderDialog({
               </ul>
               <div className="flex justify-between border-t pt-2 text-sm font-semibold">
                 <span>Total à régler</span>
-                <span>{formatAmount(group.totalDue)}</span>
+                <span>{formatAmount(totalDue)}</span>
               </div>
             </div>
+
+            {group.settledInvoices.length > 0 && (
+              <div className="space-y-2 rounded-lg border border-warning/35 bg-warning/15 p-3 text-sm">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="mt-0.5 size-4 shrink-0 text-warning" />
+                  <span>
+                    Aucun virement au relevé, mais Dolibarr indique{" "}
+                    {group.settledInvoices.length > 1
+                      ? "ces factures comme soldées"
+                      : "cette facture comme soldée"}
+                    . Vérifiez le paiement avant de la rappeler : le rappel
+                    réclame alors son montant entier.
+                  </span>
+                </div>
+                <ul className="space-y-2">
+                  {group.settledInvoices.map((invoice) => (
+                    <li key={invoice.ref} className="flex items-start gap-2">
+                      <Checkbox
+                        id={`reminder-settled-${invoice.ref}`}
+                        className="mt-0.5"
+                        checked={included.includes(invoice.ref)}
+                        disabled={sending || sent !== null}
+                        onCheckedChange={(checked) =>
+                          setIncluded((refs) =>
+                            checked === true
+                              ? [...refs, invoice.ref]
+                              : refs.filter((ref) => ref !== invoice.ref)
+                          )
+                        }
+                      />
+                      <div className="min-w-0">
+                        <Label
+                          htmlFor={`reminder-settled-${invoice.ref}`}
+                          className="font-normal"
+                        >
+                          Rappeler quand même {invoice.ref} (
+                          {formatAmount(invoice.totalTTC)})
+                        </Label>
+                        <div className="text-xs text-muted-foreground">
+                          {[
+                            settlementLabel(invoice.settlement),
+                            ...settlementLines(invoice.settlement),
+                          ].join(" — ")}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="reminder-email">Adresse e-mail du client</Label>
@@ -249,12 +365,18 @@ export default function ReminderDialog({
               {showDetail && (
                 <div className="mt-2 space-y-2">
                   <pre className="max-h-60 overflow-y-auto rounded-md bg-muted p-3 font-sans text-xs whitespace-pre-wrap">
-                    {`${group.subject}\n\n${group.body}`}
+                    {mail
+                      ? `${mail.subject}\n\n${mail.body}`
+                      : invoices.length === 0
+                        ? "Aucune facture dans ce rappel."
+                        : preview?.key === previewKey
+                          ? "Le texte du rappel n'a pas pu être préparé."
+                          : "Préparation du texte…"}
                   </pre>
                   <Button
                     size="xs"
                     variant="outline"
-                    disabled={!emailValid}
+                    disabled={!emailValid || !mail || invoices.length === 0}
                     title={
                       emailValid
                         ? "Ouvrir le brouillon dans Gmail"
@@ -291,7 +413,9 @@ export default function ReminderDialog({
               </Button>
             ) : (
               <Button
-                disabled={!emailValid || sending || tooSoon}
+                disabled={
+                  !emailValid || sending || tooSoon || invoices.length === 0
+                }
                 title={
                   tooSoon && retryAt
                     ? `Nouvel envoi possible à partir du ${formatDay(retryAt.toISOString())}`
@@ -310,6 +434,20 @@ export default function ReminderDialog({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Facture soldée dans Dolibarr : être sûr avant d'écrire au client */}
+      <ConfirmDialog
+        open={confirmingSettled}
+        type="warning"
+        title="Rappeler une facture soldée dans Dolibarr"
+        message={`Dolibarr indique ${forced.length > 1 ? `les factures ${forcedRefs} comme soldées` : `la facture ${forcedRefs} comme soldée`}. ${previous ? `Un rappel a déjà été envoyé le ${formatDay(previous.sentAt)} à ${previous.email}. ` : ""}Êtes-vous sûr de vouloir envoyer le rappel de ${formatAmount(totalDue)} à ${to} ?`}
+        confirmText="Envoyer quand même"
+        onClose={() => setConfirmingSettled(false)}
+        onConfirm={() => {
+          setConfirmingSettled(false);
+          void send();
+        }}
+      />
 
       {/* Second rappel : rappeler la date et l'adresse du précédent */}
       <ConfirmDialog
