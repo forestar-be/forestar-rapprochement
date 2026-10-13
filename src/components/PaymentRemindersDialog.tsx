@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
-import { Check, Copy, Download, Mail } from "lucide-react";
+import { Check, Copy, Download, Mail, Send } from "lucide-react";
 import {
   Alert,
   AlertDescription,
   Button,
+  Checkbox,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -13,12 +14,14 @@ import {
   DialogHeader,
   DialogTitle,
   Input,
+  Label,
   Spinner,
 } from "@forestar-be/ui";
 import {
   downloadInvoicePdf,
   getPaymentReminders,
   saveReminderEmail,
+  sendPaymentReminder,
 } from "@/lib/api";
 import { formatAmount } from "@/lib/format";
 import { PaymentReminders, ReminderGroup } from "@/types";
@@ -45,11 +48,16 @@ const gmailUrl = (to: string, group: ReminderGroup) =>
 const mailtoUrl = (to: string, group: ReminderGroup) =>
   `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(group.subject)}&body=${encodeURIComponent(group.body)}`;
 
+const shortDay = (iso: string) =>
+  iso.slice(0, 10).split("-").reverse().slice(0, 2).join("/");
+
 function ReminderRow({
+  reconciliationId,
   group,
   preparedOn,
   onPrepared,
 }: {
+  reconciliationId: string;
   group: ReminderGroup;
   preparedOn?: string;
   onPrepared: (group: ReminderGroup) => void;
@@ -60,6 +68,18 @@ function ReminderRow({
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState("");
+  const [attachInvoices, setAttachInvoices] = useState(true);
+  const [confirming, setConfirming] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState("");
+  // Dernier envoi par le serveur : celui de cette session, sinon le journal.
+  const [sentOn, setSentOn] = useState(
+    group.invoices
+      .map((i) => i.lastReminderAt ?? "")
+      .filter(Boolean)
+      .sort()
+      .pop() ?? ""
+  );
 
   const to = email.trim();
   const emailValid = EMAIL.test(to);
@@ -73,6 +93,30 @@ function ReminderRow({
       setEmailNote("Adresse enregistrée sur la fiche du client");
     } catch {
       setEmailNote("L'adresse n'a pas pu être enregistrée dans Dolibarr");
+    }
+  };
+
+  const send = async () => {
+    setSending(true);
+    setSendError("");
+    try {
+      await saveEmail();
+      const result = await sendPaymentReminder(
+        reconciliationId,
+        group.thirdpartyId,
+        to,
+        attachInvoices
+      );
+      setSentOn(result.sentAt);
+    } catch (e) {
+      setSendError(
+        e instanceof Error && e.message
+          ? e.message
+          : "Le rappel n'a pas pu être envoyé."
+      );
+    } finally {
+      setSending(false);
+      setConfirming(false);
     }
   };
 
@@ -128,11 +172,16 @@ function ReminderRow({
         </div>
         <div className="text-right">
           <div className="font-semibold">{formatAmount(group.totalDue)}</div>
-          {preparedOn && (
-            <div className="text-xs text-muted-foreground">
-              Rappel préparé le{" "}
-              {preparedOn.split("-").reverse().slice(0, 2).join("/")}
+          {sentOn ? (
+            <div className="text-xs text-success">
+              Rappel envoyé le {shortDay(sentOn)}
             </div>
+          ) : (
+            preparedOn && (
+              <div className="text-xs text-muted-foreground">
+                Rappel préparé le {shortDay(preparedOn)}
+              </div>
+            )
           )}
         </div>
       </div>
@@ -180,24 +229,79 @@ function ReminderRow({
         )}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" onClick={() => open(gmailUrl(to, group))}>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {confirming ? (
+          <>
+            <Button size="sm" disabled={sending} onClick={() => void send()}>
+              {sending ? <Spinner /> : <Send />}
+              Confirmer l&apos;envoi à {to}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={sending}
+              onClick={() => setConfirming(false)}
+            >
+              Annuler
+            </Button>
+          </>
+        ) : (
+          <Button
+            size="sm"
+            disabled={!emailValid}
+            onClick={() => {
+              setSendError("");
+              setConfirming(true);
+            }}
+          >
+            <Send />
+            {sentOn ? "Renvoyer le rappel" : "Envoyer le rappel"}
+          </Button>
+        )}
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id={`joindre-${group.thirdpartyId}`}
+            checked={attachInvoices}
+            disabled={sending}
+            onCheckedChange={(checked) => setAttachInvoices(checked === true)}
+          />
+          <Label
+            htmlFor={`joindre-${group.thirdpartyId}`}
+            className="text-sm font-normal"
+          >
+            {group.invoices.length > 1
+              ? "Joindre les factures"
+              : "Joindre la facture"}
+          </Label>
+        </div>
+      </div>
+      {sendError && <p className="text-xs text-destructive">{sendError}</p>}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-muted-foreground">
+          Ou l&apos;envoyer moi-même :
+        </span>
+        <Button
+          size="xs"
+          variant="outline"
+          onClick={() => open(gmailUrl(to, group))}
+        >
           <Mail />
-          Ouvrir dans Gmail
+          Gmail
         </Button>
         <Button
-          size="sm"
+          size="xs"
           variant="outline"
           onClick={() => open(mailtoUrl(to, group))}
         >
           Autre messagerie
         </Button>
-        <Button size="sm" variant="outline" onClick={() => void copy()}>
+        <Button size="xs" variant="outline" onClick={() => void copy()}>
           {copied ? <Check /> : <Copy />}
           {copied ? "Copié" : "Copier le texte"}
         </Button>
         <Button
-          size="sm"
+          size="xs"
           variant="outline"
           disabled={downloading}
           onClick={() => void downloadInvoices()}
@@ -225,9 +329,9 @@ function ReminderRow({
 }
 
 /**
- * Rappels de paiement d'un rapprochement : un courriel prêt à relire par
- * client resté impayé. Rien ne part d'ici : le bouton ouvre le brouillon dans
- * la messagerie, où le gérant le relit, joint la facture et l'envoie.
+ * Rappels de paiement d'un rapprochement : un rappel par client resté impayé,
+ * envoyé par le serveur (avec ou sans les factures jointes) après
+ * confirmation, ou ouvert en brouillon dans la messagerie du gérant.
  */
 export default function PaymentRemindersDialog({
   reconciliationId,
@@ -292,8 +396,9 @@ export default function PaymentRemindersDialog({
             <DialogTitle className="text-lg">Rappels de paiement</DialogTitle>
             <DialogDescription>
               Factures sans virement au relevé et encore impayées dans Dolibarr.
-              Le message s&apos;ouvre en brouillon dans votre messagerie :
-              relisez-le et joignez la facture avant d&apos;envoyer.
+              Le rappel part de l&apos;adresse de Forestar, avec ou sans la
+              facture jointe ; vous pouvez aussi l&apos;envoyer vous-même depuis
+              votre messagerie.
             </DialogDescription>
           </DialogHeader>
 
@@ -363,6 +468,7 @@ export default function PaymentRemindersDialog({
                   {groups.map((group) => (
                     <ReminderRow
                       key={group.thirdpartyId}
+                      reconciliationId={reconciliationId}
                       group={group}
                       preparedOn={
                         group.invoices

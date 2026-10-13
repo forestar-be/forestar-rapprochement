@@ -661,3 +661,17 @@ export const downloadInvoicePdf = (ref: string): Promise<Blob> =>
     `/facturation/reminders/invoices/${encodeURIComponent(ref)}/pdf`,
     "GET"
   );
+
+// Envoie le rappel d'un client par le serveur, avec ou sans factures jointes.
+export const sendPaymentReminder = (
+  reconciliationId: string,
+  thirdpartyId: number,
+  email: string,
+  attachInvoices: boolean
+): Promise<{ status: "sent"; sentAt: string; invoices: string[] }> =>
+  apiRequest(
+    `/facturation/reconciliations/${reconciliationId}/reminders/send`,
+    "POST",
+    undefined,
+    { thirdpartyId, email, attachInvoices }
+  );

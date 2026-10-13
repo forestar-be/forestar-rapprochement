@@ -310,6 +310,8 @@ export interface ReminderInvoice {
   paid: number;
   due: number;
   communication: string;
+  /** Dernier rappel envoyé par le serveur pour cette facture (ISO). */
+  lastReminderAt?: string | null;
 }
 
 /** Un rappel par client : ses factures impayées et le courriel prêt à relire. */
