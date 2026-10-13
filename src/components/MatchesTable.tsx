@@ -103,6 +103,12 @@ function getMatchingTransactionsInfo(
   };
 }
 
+const isSettledInDolibarr = (
+  item: DisplayItem,
+  reminders: PaymentReminderIndex
+): boolean =>
+  Boolean(item.invoice?.ref && reminders.settled.has(item.invoice.ref));
+
 function InvoiceCell({
   invoice,
   reminders,
@@ -126,17 +132,10 @@ function InvoiceCell({
       <div className="font-semibold">
         {invoice ? formatAmount(invoice.montantTTC) : "N/A"}
       </div>
-      {lastReminder ? (
+      {lastReminder && (
         <div className="text-xs text-success">
           Rappel envoyé le {formatShortDay(lastReminder.sentAt)}
         </div>
-      ) : (
-        ref &&
-        reminders?.settled.has(ref) && (
-          <div className="text-xs text-muted-foreground">
-            Soldée dans Dolibarr
-          </div>
-        )
       )}
     </div>
   );
@@ -253,9 +252,25 @@ export default function MatchesTable({
 
           const match = item.match!;
           const transaction = getTransactionFromMatch(match);
-          return transaction ? (
-            <PaymentCell transaction={transaction} invoice={item.invoice} />
-          ) : (
+          if (transaction) {
+            return (
+              <PaymentCell transaction={transaction} invoice={item.invoice} />
+            );
+          }
+          // Payée autrement que par un virement du relevé (ou après sa
+          // période) : sans cette mention, l'absence de « Rappeler » ne
+          // s'explique pas.
+          if (isSettledInDolibarr(item, reminders)) {
+            return (
+              <div>
+                <div className="font-medium">Soldée dans Dolibarr</div>
+                <div className="text-xs text-muted-foreground">
+                  Aucun virement au relevé
+                </div>
+              </div>
+            );
+          }
+          return (
             <div
               className={`italic ${
                 match.validationStatus === "REJECTED"
@@ -272,7 +287,7 @@ export default function MatchesTable({
       },
       {
         id: "type",
-        header: "Type",
+        header: "Associée par",
         enableSorting: false,
         meta: { maxWidth: false },
         cell: ({ row }) => {
@@ -291,6 +306,14 @@ export default function MatchesTable({
           }
 
           const match = item.match!;
+          if (
+            !getTransactionFromMatch(match) &&
+            isSettledInDolibarr(item, reminders)
+          ) {
+            return (
+              <StatusBadge tone="success">Soldée dans Dolibarr</StatusBadge>
+            );
+          }
           return (
             <div className="flex flex-col items-start gap-1">
               <StatusBadge
@@ -309,7 +332,7 @@ export default function MatchesTable({
       },
       {
         id: "confidence",
-        header: "Confiance",
+        header: "Vérification",
         enableSorting: false,
         meta: { maxWidth: false },
         cell: ({ row }) => {
@@ -340,16 +363,19 @@ export default function MatchesTable({
               >
                 {getValidationStatusLabel(match.validationStatus)}
               </StatusBadge>
-              <div className="flex min-w-28 items-center gap-2">
-                <Progress
-                  value={confidence.percent}
-                  tone={confidence.tone}
-                  aria-label="Confiance"
-                />
-                <span className="text-muted-foreground">
-                  {confidence.label}
-                </span>
-              </div>
+              {/* Validée vaut toujours 100 % : la barre n'apprend rien. */}
+              {match.validationStatus !== "VALIDATED" && (
+                <div className="flex min-w-28 items-center gap-2">
+                  <Progress
+                    value={confidence.percent}
+                    tone={confidence.tone}
+                    aria-label="Confiance"
+                  />
+                  <span className="text-muted-foreground">
+                    {confidence.label}
+                  </span>
+                </div>
+              )}
             </div>
           );
         },
