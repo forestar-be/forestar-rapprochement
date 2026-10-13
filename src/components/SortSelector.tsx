@@ -35,7 +35,7 @@ const SORT_OPTIONS: SortOption[] = [
   {
     field: null,
     label: "Tri par défaut",
-    description: "Validés à la fin, reste par confiance",
+    description: "Validées à la fin, reste par confiance",
   },
   {
     field: "confidence",
@@ -50,7 +50,7 @@ const SORT_OPTIONS: SortOption[] = [
   {
     field: "validated",
     label: "Statut de validation",
-    description: "Validé, rejeté ou en attente",
+    description: "Validée, rejetée ou en attente",
   },
   {
     field: "amount",

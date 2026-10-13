@@ -20,6 +20,8 @@ interface ExportWarningModalProps {
   onConfirm: () => void;
   searchTerm: string;
   selectedFilters: string[];
+  /** Seules les factures à rappeler sont affichées. */
+  remindOnly?: boolean;
 }
 
 const DONT_SHOW_AGAIN_KEY = "export_warning_dont_show_again";
@@ -41,11 +43,11 @@ export function isExportWarningDismissed(): boolean {
 const getFilterBadgeLabel = (filterType: string) => {
   switch (filterType) {
     case "EXACT_REF":
-      return "Réf. exacte";
+      return "Référence";
     case "EXACT_AMOUNT":
-      return "Montant exact";
+      return "Montant seul";
     case "REFINED_AMOUNT":
-      return "Montant raffiné";
+      return "Montant + payeur";
     case "SIMPLE_NAME":
       return "Nom exact";
     case "FUZZY_NAME":
@@ -69,6 +71,7 @@ export default function ExportWarningModal({
   onConfirm,
   searchTerm,
   selectedFilters,
+  remindOnly = false,
 }: ExportWarningModalProps) {
   const [dontShowAgain, setDontShowAgain] = useState(false);
 
@@ -91,6 +94,9 @@ export default function ExportWarningModal({
     filterDescriptions.push(
       `Filtres de type: ${selectedFilters.map(getFilterBadgeLabel).join(", ")}`
     );
+  }
+  if (remindOnly) {
+    filterDescriptions.push("Factures à rappeler seulement");
   }
 
   return (

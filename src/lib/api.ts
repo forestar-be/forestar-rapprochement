@@ -11,6 +11,9 @@ import {
   DetailedReconciliationMatch,
   InvoiceFamilySummary,
   DolibarrReadStatus,
+  PaymentReminders,
+  PaymentReminderSent,
+  ReminderInvoice,
 } from "@/types";
 
 import { API_URL, getSessionClient, SSO_ENABLED } from "./session";
@@ -630,3 +633,62 @@ export const updateReconciliationTitle = async (
     return false;
   }
 };
+
+// === Rappels de paiement ===
+
+// Factures restées sans virement et encore impayées dans Dolibarr, par client.
+export const getPaymentReminders = (
+  reconciliationId: string
+): Promise<PaymentReminders> =>
+  apiRequest(
+    `/facturation/reconciliations/${reconciliationId}/reminders`,
+    "GET"
+  );
+
+// Range l'adresse saisie sur la fiche du client dans Dolibarr.
+export const saveReminderEmail = (
+  thirdpartyId: number,
+  email: string
+): Promise<{ email: string }> =>
+  apiRequest(
+    `/facturation/reminders/thirdparties/${thirdpartyId}/email`,
+    "PUT",
+    undefined,
+    { email }
+  );
+
+// Envoie le rappel d'un client par le serveur, avec ou sans factures jointes.
+export const sendPaymentReminder = (
+  reconciliationId: string,
+  thirdpartyId: number,
+  email: string,
+  attachInvoices: boolean,
+  // factures soldées dans Dolibarr à rappeler quand même
+  includeSettled: string[] = []
+): Promise<PaymentReminderSent> =>
+  apiRequest(
+    `/facturation/reconciliations/${reconciliationId}/reminders/send`,
+    "POST",
+    undefined,
+    { thirdpartyId, email, attachInvoices, includeSettled }
+  );
+
+// Texte du rappel pour un choix de factures (quand une facture soldée dans
+// Dolibarr y est ajoutée).
+export const previewReminderMail = (
+  invoices: ReminderInvoice[],
+  account: PaymentReminders["account"]
+): Promise<{ subject: string; body: string }> =>
+  apiRequest("/facturation/reminders/preview", "POST", undefined, {
+    invoices: invoices.map(
+      ({ ref, date, totalTTC, paid, due, communication }) => ({
+        ref,
+        date,
+        totalTTC,
+        paid,
+        due,
+        communication,
+      })
+    ),
+    account,
+  });

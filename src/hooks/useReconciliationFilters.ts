@@ -154,7 +154,9 @@ export function useReconciliationFilters(
   currentPage: number,
   itemsPerPage: number,
   getInvoiceFromMatch: (match: DetailedReconciliationMatch) => any,
-  getTransactionFromMatch: (match: DetailedReconciliationMatch) => any
+  getTransactionFromMatch: (match: DetailedReconciliationMatch) => any,
+  remindOnly: boolean,
+  toRemind: ReadonlyMap<string, unknown>
 ) {
   // D'abord regrouper toutes les correspondances par facture pour préserver le statut "multiple"
   const allGrouped = useMemo(() => {
@@ -285,6 +287,15 @@ export function useReconciliationFilters(
     let items: DisplayItem[] = [];
 
     Object.entries(filteredGroups).forEach(([invoiceId, group]) => {
+      // « À rappeler » ne garde que les factures simples à rappeler : une facture
+      // à correspondances multiples attend d'abord d'être résolue.
+      if (
+        remindOnly &&
+        (group.isOriginallyMultiple || !toRemind.has(group.invoice?.ref ?? ""))
+      ) {
+        return;
+      }
+
       // Une facture est considérée comme "multiple" si elle était originellement multiple,
       // même si le filtrage a réduit le nombre de correspondances affichées
       if (group.isOriginallyMultiple) {
@@ -353,6 +364,8 @@ export function useReconciliationFilters(
     getInvoiceFromMatch,
     getTransactionFromMatch,
     sortConfig,
+    remindOnly,
+    toRemind,
   ]);
 
   // Calculer le nombre total d'éléments
@@ -404,6 +417,16 @@ export function useReconciliationFilters(
     return counts;
   }, [availableFilterTypes, groupedWithMultipleFlag]);
 
+  // Factures simples à rappeler, quels que soient la recherche et les filtres
+  const remindCount = useMemo(
+    () =>
+      Object.values(groupedWithMultipleFlag).filter(
+        (group) =>
+          !group.isOriginallyMultiple && toRemind.has(group.invoice?.ref ?? "")
+      ).length,
+    [groupedWithMultipleFlag, toRemind]
+  );
+
   // Calculer la pagination
   const paginationData = useMemo(() => {
     const totalItems = displayItems.length;
@@ -420,6 +443,7 @@ export function useReconciliationFilters(
     availableFilterTypes,
     totalItemsCount,
     filterTypeCounts,
+    remindCount,
     paginationData,
   };
 }
