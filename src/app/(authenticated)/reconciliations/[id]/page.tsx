@@ -22,6 +22,7 @@ import MatchesTable from "@/components/MatchesTable";
 import FileInfo from "@/components/FileInfo";
 import ExportWarningModal from "@/components/ExportWarningModal";
 import ExportLoadingModal from "@/components/ExportLoadingModal";
+import PaymentRemindersDialog from "@/components/PaymentRemindersDialog";
 import { useReconciliationDetail } from "@/hooks/useReconciliationDetail";
 import { useReconciliationFilters } from "@/hooks/useReconciliationFilters";
 import { DetailedReconciliationMatch } from "@/types";
@@ -169,6 +170,9 @@ export default function ReconciliationDetailPage() {
           onSortChange={handleSortChange}
           onCreateMatch={() => setShowCreateMatchModal(true)}
           onExportExcel={handleExportExcel}
+          extraActions={
+            <PaymentRemindersDialog reconciliationId={reconciliationId} />
+          }
         />
 
         {/* Statistiques rapides */}

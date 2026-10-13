@@ -21,6 +21,8 @@ interface ReconciliationFiltersProps {
   onSortChange: (config: SortConfig) => void;
   onCreateMatch: () => void;
   onExportExcel: () => void;
+  /** Actions propres à la page, placées avant l'export. */
+  extraActions?: React.ReactNode;
 }
 
 // Fonction pour obtenir le label d'un type de filtre
@@ -61,6 +63,7 @@ export default function ReconciliationFilters({
   onSortChange,
   onCreateMatch,
   onExportExcel,
+  extraActions,
 }: ReconciliationFiltersProps) {
   const filterOptions: ComboboxOption[] = availableFilterTypes.map((type) => ({
     value: type,
@@ -72,6 +75,7 @@ export default function ReconciliationFilters({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-lg font-medium">Filtres des correspondances</h3>
         <div className="flex flex-wrap gap-2">
+          {extraActions}
           <Button variant="outline" onClick={onExportExcel}>
             <Download />
             Export Excel

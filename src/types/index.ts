@@ -300,3 +300,40 @@ export type DolibarrReadStatus =
       families: InvoiceFamilySummary[];
     }
   | { status: "error"; message: string };
+
+// === Rappels de paiement ===
+
+export interface ReminderInvoice {
+  ref: string;
+  date: string;
+  totalTTC: number;
+  paid: number;
+  due: number;
+  communication: string;
+}
+
+/** Un rappel par client : ses factures impayées et le courriel prêt à relire. */
+export interface ReminderGroup {
+  thirdpartyId: number;
+  name: string;
+  codeClient: string;
+  address: string;
+  zip: string;
+  town: string;
+  email: string;
+  invoices: ReminderInvoice[];
+  totalDue: number;
+  subject: string;
+  body: string;
+}
+
+/** Réponse de GET /facturation/reconciliations/:id/reminders. */
+export interface PaymentReminders {
+  groups: ReminderGroup[];
+  account: { iban: string; bic: string } | null;
+  /** Factures dont l'association reste à trancher : hors rappel. */
+  toVerify: number;
+  /** Sans virement au relevé, mais soldées dans Dolibarr : hors rappel. */
+  settledInDolibarr: string[];
+  unknownInDolibarr: string[];
+}

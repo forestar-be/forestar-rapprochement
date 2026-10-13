@@ -11,6 +11,7 @@ import {
   DetailedReconciliationMatch,
   InvoiceFamilySummary,
   DolibarrReadStatus,
+  PaymentReminders,
 } from "@/types";
 
 import { API_URL, getSessionClient, SSO_ENABLED } from "./session";
@@ -630,3 +631,33 @@ export const updateReconciliationTitle = async (
     return false;
   }
 };
+
+// === Rappels de paiement ===
+
+// Factures restées sans virement et encore impayées dans Dolibarr, par client.
+export const getPaymentReminders = (
+  reconciliationId: string
+): Promise<PaymentReminders> =>
+  apiRequest(
+    `/facturation/reconciliations/${reconciliationId}/reminders`,
+    "GET"
+  );
+
+// Range l'adresse saisie sur la fiche du client dans Dolibarr.
+export const saveReminderEmail = (
+  thirdpartyId: number,
+  email: string
+): Promise<{ email: string }> =>
+  apiRequest(
+    `/facturation/reminders/thirdparties/${thirdpartyId}/email`,
+    "PUT",
+    undefined,
+    { email }
+  );
+
+// PDF d'une facture, à joindre au rappel.
+export const downloadInvoicePdf = (ref: string): Promise<Blob> =>
+  apiRequest(
+    `/facturation/reminders/invoices/${encodeURIComponent(ref)}/pdf`,
+    "GET"
+  );
