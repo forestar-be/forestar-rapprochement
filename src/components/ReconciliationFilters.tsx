@@ -27,11 +27,11 @@ interface ReconciliationFiltersProps {
 const getFilterLabel = (filterType: string, count: number) => {
   switch (filterType) {
     case "EXACT_REF":
-      return `Référence exacte (${count})`;
+      return `Référence (${count})`;
     case "EXACT_AMOUNT":
-      return `Montant exact (${count})`;
+      return `Montant seul (${count})`;
     case "REFINED_AMOUNT":
-      return `Montant raffiné (${count})`;
+      return `Montant + payeur (${count})`;
     case "SIMPLE_NAME":
       return `Nom exact (${count})`;
     case "FUZZY_NAME":

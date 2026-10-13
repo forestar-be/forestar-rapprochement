@@ -221,6 +221,11 @@ export default function MatchesTable({
               >
                 {getMatchTypeOnly(match.matchType, match.isManualMatch)}
               </StatusBadge>
+              {match.matchType !== "NONE" && match.notes?.[0] && (
+                <span className="max-w-64 text-xs whitespace-normal text-muted-foreground">
+                  {match.notes[0]}
+                </span>
+              )}
               <StatusBadge
                 tone={getValidationStatusTone(match.validationStatus)}
               >

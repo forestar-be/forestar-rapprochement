@@ -37,11 +37,11 @@ export const getMatchTypeLabel = (
   // Sinon, afficher le type de correspondance normal
   switch (matchType) {
     case "EXACT_REF":
-      return "Référence exacte";
+      return "Référence";
     case "EXACT_AMOUNT":
-      return "Montant exact";
+      return "Montant seul";
     case "REFINED_AMOUNT":
-      return "Montant raffiné";
+      return "Montant + payeur";
     case "SIMPLE_NAME":
       return "Nom exact";
     case "FUZZY_NAME":
@@ -66,11 +66,11 @@ export const getMatchTypeOnly = (
 
   switch (matchType) {
     case "EXACT_REF":
-      return "Référence exacte";
+      return "Référence";
     case "EXACT_AMOUNT":
-      return "Montant exact";
+      return "Montant seul";
     case "REFINED_AMOUNT":
-      return "Montant raffiné";
+      return "Montant + payeur";
     case "SIMPLE_NAME":
       return "Nom exact";
     case "FUZZY_NAME":
@@ -142,10 +142,11 @@ export const getMatchTypeTone = (
   switch (matchType) {
     case "EXACT_REF":
       return "success";
-    case "EXACT_AMOUNT":
     case "REFINED_AMOUNT":
     case "SIMPLE_NAME":
       return "info";
+    // Montant égal sans payeur reconnu : proposé, à vérifier.
+    case "EXACT_AMOUNT":
     case "FUZZY_NAME":
       return "warning";
     case "NONE":

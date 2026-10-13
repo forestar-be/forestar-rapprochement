@@ -41,11 +41,11 @@ export function isExportWarningDismissed(): boolean {
 const getFilterBadgeLabel = (filterType: string) => {
   switch (filterType) {
     case "EXACT_REF":
-      return "Réf. exacte";
+      return "Référence";
     case "EXACT_AMOUNT":
-      return "Montant exact";
+      return "Montant seul";
     case "REFINED_AMOUNT":
-      return "Montant raffiné";
+      return "Montant + payeur";
     case "SIMPLE_NAME":
       return "Nom exact";
     case "FUZZY_NAME":

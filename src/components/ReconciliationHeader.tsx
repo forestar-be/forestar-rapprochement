@@ -150,11 +150,13 @@ export default function ReconciliationHeader({
 
         <StatCard
           icon={<CheckCircle className="size-5 text-success" />}
-          label="Appariées"
+          label="Payées (sûr)"
         >
-          {reconciliation.exactMatches + reconciliation.fuzzyMatches}
+          {reconciliation.exactMatches}
           <span className="ml-1 text-sm font-normal text-muted-foreground">
             / {reconciliation.totalInvoices}
+            {reconciliation.fuzzyMatches > 0 &&
+              ` · ${reconciliation.fuzzyMatches} à vérifier`}
           </span>
         </StatCard>
       </div>

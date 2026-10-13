@@ -156,16 +156,18 @@ export default function ReconciliationsPage() {
       },
       {
         id: "matched",
-        header: "Appariées",
+        header: "Payées",
         enableSorting: false,
         meta: { maxWidth: false },
         cell: ({ row }) => (
           <div className="text-right">
             <div className="font-medium">
-              {row.original.exactMatches + row.original.fuzzyMatches} appariées
+              {row.original.exactMatches} sûres (
+              {row.original.reconciliationRate}
+              %)
             </div>
             <div className="text-muted-foreground">
-              {row.original.reconciliationRate}% de réussite
+              {row.original.fuzzyMatches} à vérifier
             </div>
           </div>
         ),
