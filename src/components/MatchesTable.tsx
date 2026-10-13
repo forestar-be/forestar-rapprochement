@@ -109,17 +109,8 @@ const isSettledInDolibarr = (
 ): boolean =>
   Boolean(item.invoice?.ref && reminders.settled.has(item.invoice.ref));
 
-function InvoiceCell({
-  invoice,
-  reminders,
-}: {
-  invoice: any;
-  reminders?: PaymentReminderIndex;
-}) {
+function InvoiceCell({ invoice }: { invoice: any }) {
   const ref: string | undefined = invoice?.ref;
-  const lastReminder = ref
-    ? reminders?.toRemind.get(ref)?.invoice.lastReminder
-    : null;
   return (
     <div className="space-y-0.5">
       <div className="font-medium">{ref || "N/A"}</div>
@@ -132,11 +123,6 @@ function InvoiceCell({
       <div className="font-semibold">
         {invoice ? formatAmount(invoice.montantTTC) : "N/A"}
       </div>
-      {lastReminder && (
-        <div className="text-xs text-success">
-          Rappel envoyé le {formatShortDay(lastReminder.sentAt)}
-        </div>
-      )}
     </div>
   );
 }
@@ -205,12 +191,7 @@ export default function MatchesTable({
         header: "Facture",
         enableSorting: false,
         meta: { maxWidth: false },
-        cell: ({ row }) => (
-          <InvoiceCell
-            invoice={row.original.invoice}
-            reminders={row.original.type === "single" ? reminders : undefined}
-          />
-        ),
+        cell: ({ row }) => <InvoiceCell invoice={row.original.invoice} />,
       },
       {
         id: "transaction",
@@ -270,17 +251,27 @@ export default function MatchesTable({
               </div>
             );
           }
+          const lastReminder = item.invoice?.ref
+            ? reminders.toRemind.get(item.invoice.ref)?.invoice.lastReminder
+            : null;
           return (
-            <div
-              className={`italic ${
-                match.validationStatus === "REJECTED"
-                  ? "text-destructive"
-                  : "text-muted-foreground"
-              }`}
-            >
-              {match.validationStatus === "REJECTED"
-                ? "Association rejetée"
-                : "Aucun paiement trouvé"}
+            <div>
+              <div
+                className={`italic ${
+                  match.validationStatus === "REJECTED"
+                    ? "text-destructive"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {match.validationStatus === "REJECTED"
+                  ? "Association rejetée"
+                  : "Aucun paiement trouvé"}
+              </div>
+              {lastReminder && (
+                <div className="text-xs text-success">
+                  Rappel envoyé le {formatShortDay(lastReminder.sentAt)}
+                </div>
+              )}
             </div>
           );
         },
