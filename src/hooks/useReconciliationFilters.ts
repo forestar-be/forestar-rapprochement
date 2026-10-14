@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { DetailedReconciliationMatch } from "@/types";
 import { SortConfig } from "@/components/SortSelector";
+import { defaultOrderRank } from "@/lib/reconciliationUtils";
 
 // Fonction utilitaire pour appliquer le tri (copie de useReconciliationDetail)
 function applySorting(
@@ -12,17 +13,19 @@ function applySorting(
   const sortedItems = [...items];
 
   sortedItems.sort((a, b) => {
-    // Tri par défaut : validés toujours à la fin, reste par confiance
+    // Tri par défaut : d'abord les factures sans paiement, les validées à la
+    // fin (sens inversé en croissant), puis par confiance dans chaque rang.
     if (!sortConfig.field) {
-      // Séparer les validés des autres
-      const aIsValidated = isValidated(a, getTransactionFromMatch);
-      const bIsValidated = isValidated(b, getTransactionFromMatch);
+      const rank = (item: any) =>
+        defaultOrderRank(
+          item,
+          Boolean(item.match && getTransactionFromMatch(item.match))
+        );
+      const byRank = rank(a) - rank(b);
+      if (byRank !== 0) {
+        return sortConfig.direction === "asc" ? -byRank : byRank;
+      }
 
-      // Si l'un est validé et l'autre non, mettre le validé à la fin
-      if (aIsValidated && !bIsValidated) return 1;
-      if (!aIsValidated && bIsValidated) return -1;
-
-      // Pour les non-validés OU les validés entre eux, trier par confiance
       const aConfidence = getConfidenceValue(a, getTransactionFromMatch);
       const bConfidence = getConfidenceValue(b, getTransactionFromMatch);
 
@@ -70,20 +73,6 @@ function applySorting(
   });
 
   return sortedItems;
-}
-
-// Fonction pour vérifier si un item est validé
-function isValidated(
-  item: any,
-  getTransactionFromMatch: (match: DetailedReconciliationMatch) => any
-): boolean {
-  if (item.type === "multiple") return false;
-  if (!item.match) return false;
-
-  const transaction = getTransactionFromMatch(item.match);
-  if (!transaction) return false;
-
-  return item.match.validationStatus === "VALIDATED";
 }
 
 // Fonction pour obtenir l'ordre de validation (3 = validé, 2 = en attente, 1 = rejeté, 0 = non matché)

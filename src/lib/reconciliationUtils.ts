@@ -342,3 +342,26 @@ export const parseTransactionLabel = (
     ...(communication ? { communication } : {}),
   };
 };
+
+/**
+ * Rang d'une ligne dans l'ordre par défaut du tableau et de l'export : d'abord
+ * les factures sans paiement (à rappeler), puis les choix multiples, les
+ * associations à vérifier, les paiements sûrs, enfin les validés.
+ */
+export const defaultOrderRank = (
+  item: {
+    type: "single" | "multiple";
+    match?: {
+      confidence: number;
+      isManualMatch: boolean;
+      validationStatus?: string;
+    };
+  },
+  hasTransaction: boolean
+): number => {
+  if (item.type === "multiple") return 1;
+  const match = item.match;
+  if (!match || !hasTransaction) return 0;
+  if (match.validationStatus === "VALIDATED" || match.isManualMatch) return 4;
+  return match.confidence >= SURE_CONFIDENCE ? 3 : 2;
+};
