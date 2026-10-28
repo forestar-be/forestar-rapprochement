@@ -4,6 +4,8 @@
   "license": "Forestar - All Rights Reserved",
   "private": true,
   "scripts": {
+    "memory:check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tools/agent-memory/check.ts",
+    "memory:impact": "node tools/agent-memory/impact.ts",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
