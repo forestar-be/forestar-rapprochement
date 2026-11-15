@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { DetailedReconciliationMatch, DetailedBankTransaction } from "@/types";
 import { getMatchTypeLabel } from "@/lib/reconciliationUtils";
 
@@ -30,6 +30,19 @@ interface ExportProgress {
   onProgress?: (progress: number, step: string) => void;
 }
 
+/** En-têtes = clés du premier objet, puis une ligne par objet. */
+function addJsonRows(
+  worksheet: ExcelJS.Worksheet,
+  rows: Record<string, unknown>[]
+): void {
+  if (rows.length === 0) return;
+  const headers = Object.keys(rows[0]);
+  worksheet.addRow(headers);
+  for (const row of rows) {
+    worksheet.addRow(headers.map((h) => row[h] as ExcelJS.CellValue));
+  }
+}
+
 export async function exportToExcel(
   data: ExportData,
   options: ExportProgress = {}
@@ -40,7 +53,7 @@ export async function exportToExcel(
     onProgress?.(10, "Préparation des données...");
 
     // Créer un nouveau classeur
-    const workbook = XLSX.utils.book_new();
+    const workbook = new ExcelJS.Workbook();
 
     // Préparer les données pour l'export
     const excelData: any[] = [];
@@ -153,7 +166,8 @@ export async function exportToExcel(
     onProgress?.(85, "Création du fichier Excel...");
 
     // Créer la feuille de calcul
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const worksheet = workbook.addWorksheet("Correspondances");
+    addJsonRows(worksheet, excelData);
 
     // Définir la largeur des colonnes
     const columnWidths = [
@@ -170,10 +184,9 @@ export async function exportToExcel(
       { wch: 12 }, // Confiance
     ];
 
-    worksheet["!cols"] = columnWidths;
-
-    // Ajouter la feuille au classeur
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Correspondances");
+    columnWidths.forEach((c, i) => {
+      worksheet.getColumn(i + 1).width = c.wch;
+    });
 
     // Créer une feuille d'informations sur l'export
     const exportInfo = [
@@ -199,13 +212,10 @@ export async function exportToExcel(
       },
     ];
 
-    const infoWorksheet = XLSX.utils.json_to_sheet(exportInfo);
-    infoWorksheet["!cols"] = [{ wch: 25 }, { wch: 50 }];
-    XLSX.utils.book_append_sheet(
-      workbook,
-      infoWorksheet,
-      "Informations Export"
-    );
+    const infoWorksheet = workbook.addWorksheet("Informations Export");
+    addJsonRows(infoWorksheet, exportInfo);
+    infoWorksheet.getColumn(1).width = 25;
+    infoWorksheet.getColumn(2).width = 50;
 
     onProgress?.(95, "Finalisation du téléchargement...");
 
@@ -243,7 +253,18 @@ export async function exportToExcel(
     const fileName = `${baseFileName}${filterSuffix}.xlsx`;
 
     // Écrire et télécharger le fichier
-    XLSX.writeFile(workbook, fileName);
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
 
     onProgress?.(100, "Export terminé !");
   } catch (error) {
